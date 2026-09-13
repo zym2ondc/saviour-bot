@@ -25,7 +25,7 @@ if (!token) {
 }
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds],
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
 });
 
 // Load slash commands
@@ -45,6 +45,22 @@ client.once('ready', () => {
   } catch (e) {
     console.error('Auth server failed to start:', e.message);
   }
+});
+
+// Give Unverified to everyone who joins (only if verify is set up — Unverified role exists)
+client.on('guildMemberAdd', async (member) => {
+  try {
+    if (member.user.bot) return;
+    const guild = member.guild;
+    let unverifiedRole = null;
+    if (process.env.UNVERIFIED_ROLE_ID) {
+      unverifiedRole = await guild.roles.fetch(process.env.UNVERIFIED_ROLE_ID).catch(() => null);
+    }
+    if (!unverifiedRole) unverifiedRole = guild.roles.cache.find(r => r.name === (process.env.UNVERIFIED_ROLE_NAME || 'Unverified')) || null;
+    if (!unverifiedRole) return; // verify not set up yet — do nothing
+    if (member.roles.cache.has(unverifiedRole.id)) return;
+    await member.roles.add(unverifiedRole, 'Auto Unverified on join').catch(e => console.warn('unverified add failed:', e.message));
+  } catch {}
 });
 
 // Auto-lock newly created channels for Unverified (except ticket channels, which manage their own perms)
