@@ -77,7 +77,12 @@ client.once('ready', () => {
             const role = j ? await g.roles.fetch(j.roleId).catch(() => null) : null;
             if (m && role && m.roles.cache.has(role.id)) {
               await m.roles.remove(role, 'Jail expired').catch(() => {});
-              if (still.roles?.length) await m.roles.add(still.roles.filter(id => g.roles.cache.has(id)), 'Jail expired: restore').catch(() => {});
+              if (still.roles?.length) {
+                for (const id of still.roles) {
+                  if (!g.roles.cache.has(id)) continue;
+                  await m.roles.add(id, 'Jail expired: restore').catch(() => {});
+                }
+              }
             }
           } catch {}
         }, ms).unref?.();

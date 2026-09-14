@@ -29,29 +29,44 @@ module.exports = {
 
     const member = await guild.members.fetch(targetUser.id).catch(() => null);
     if (!member) return interaction.editReply('❌ That user is not in this server.');
-    if (member.id === guild.ownerId) return interaction.editReply('❌ You cannot jail the server owner.');
+    if (member.id === guild.ownerId) return interaction.editReply('❌ You cannot jail the server owner (Discord forbids it).');
     if (member.id === guild.client.user.id) return interaction.editReply('❌ I cannot jail myself.');
-    if (member.permissions.has(PermissionFlagsBits.Administrator)) {
-      return interaction.editReply('❌ You cannot jail an administrator (remove their admin first).');
-    }
-    if (!member.manageable) {
-      return interaction.editReply('❌ I cannot jail them — my role must be **above** their highest role and above Jailed.');
-    }
+    if (member.id === interaction.user.id) return interaction.editReply('❌ You cannot jail yourself — you would lock yourself in with no admin powers left.');
     if (member.roles.cache.has(jailedRole.id)) {
       return interaction.editReply(`⚠️ ${targetUser.tag} is already jailed in ${jailChannel}.`);
     }
+    if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+      return interaction.editReply('❌ I need the **Manage Roles** permission.');
+    }
 
-    // Save their roles so /unjail can restore them
+    // Save + strip EVERY role they have (except @everyone, Jailed, and managed
+    // integration roles which Discord won't let anyone remove). No admin bypass,
+    // no hierarchy filter — we attempt all of them and report what stuck.
     const rolesToSave = member.roles.cache
-      .filter(r => r.id !== guild.id && r.id !== jailedRole.id && !r.managed && r.position < guild.members.me.roles.highest.position)
+      .filter(r => r.id !== guild.id && r.id !== jailedRole.id && !r.managed)
       .map(r => r.id);
 
+    const audit = `Jailed by ${interaction.user.tag}: ${reason}`;
+    const stripped = [];
+    const failed = [];
+    if (rolesToSave.length) {
+      try {
+        await member.roles.remove(rolesToSave, audit);
+        stripped.push(...rolesToSave);
+      } catch {
+        // Bulk failed (usually one role above the bot) — do them one by one
+        // so a single high role doesn't protect the rest.
+        for (const rid of rolesToSave) {
+          try { await member.roles.remove(rid, audit); stripped.push(rid); }
+          catch { failed.push(rid); }
+        }
+      }
+    }
     try {
-      if (rolesToSave.length) await member.roles.remove(rolesToSave, `Jailed by ${interaction.user.tag}: ${reason}`).catch(() => {});
-      await member.roles.add(jailedRole, `Jailed by ${interaction.user.tag}: ${reason}`);
+      await member.roles.add(jailedRole, audit);
       // No timeout — the Jailed role itself restricts them to the jail channel only.
     } catch (e) {
-      return interaction.editReply(`❌ Jailing failed: ${e.message}`);
+      return interaction.editReply(`❌ Could not add the Jailed role: ${e.message}\nPut my role **above Jailed** in Server Settings → Roles.`);
     }
 
     const expiresAt = minutes > 0 ? Date.now() + minutes * 60 * 1000 : null;
@@ -74,7 +89,12 @@ module.exports = {
           const role = j ? await g.roles.fetch(j.roleId).catch(() => null) : null;
           if (m && role && m.roles.cache.has(role.id)) {
             await m.roles.remove(role, 'Jail expired').catch(() => {});
-            if (still.roles?.length) await m.roles.add(still.roles.filter(id => g.roles.cache.has(id)), 'Jail expired: restore').catch(() => {});
+            if (still.roles?.length) {
+              for (const id of still.roles) {
+                if (!g.roles.cache.has(id)) continue;
+                await m.roles.add(id, 'Jail expired: restore').catch(() => {});
+              }
+            }
           }
           const ch = j ? await g.channels.fetch(j.channelId).catch(() => null) : null;
           if (ch?.isTextBased?.()) ch.send(`🔓 <@${member.id}> jail time expired — released.`).catch(() => {});
@@ -88,7 +108,12 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setTitle('🔒 User jailed')
-      .setDescription(`${member} (${targetUser.tag}) can now **only** see ${jailChannel}.\n**Reason:** ${reason}${minutes ? `\n**Auto-release:** in ${minutes} minute(s)` : '\n**Release:** `/unjail @user`'}`)
+      .setDescription(
+        `${member} (${targetUser.tag}) can now **only** see ${jailChannel}.\n` +
+        `**Reason:** ${reason}${minutes ? `\n**Auto-release:** in ${minutes} minute(s)` : '\n**Release:** `/unjail @user`'}` +
+        `\n**Roles stripped:** ${stripped.length}/${rolesToSave.length}` +
+        (failed.length ? `\n⚠️ Couldn't remove ${failed.length} role(s) — my role must be **above** them: ${failed.map(id => `<@&${id}>`).join(', ')}` : '')
+      )
       .setColor(0xed4245)
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });

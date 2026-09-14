@@ -31,14 +31,21 @@ module.exports = {
     // and puts it straight back on them.
     security.removeJailed(guild.id, member.id);
 
+    let restored = 0;
+    const notRestored = [];
+
     try {
       if (jailedRole && member.roles.cache.has(jailedRole.id)) {
         await member.roles.remove(jailedRole, `Unjailed by ${interaction.user.tag}`);
       }
-      // Restore saved roles (only ones that still exist + below bot)
+      // Restore EVERY saved role that still exists, one by one so a single
+      // high role doesn't block the rest.
       if (record?.roles?.length) {
-        const restorable = record.roles.filter(id => guild.roles.cache.has(id) && guild.roles.cache.get(id).position < guild.members.me.roles.highest.position);
-        if (restorable.length) await member.roles.add(restorable, 'Unjail: restore previous roles').catch(() => {});
+        for (const id of record.roles) {
+          if (!guild.roles.cache.has(id)) continue; // role was deleted
+          try { await member.roles.add(id, 'Unjail: restore previous roles'); restored++; }
+          catch { notRestored.push(`<@&${id}>`); }
+        }
       }
     } catch (e) {
       return interaction.editReply(`❌ Unjail failed: ${e.message}\n(My role must be above Jailed and I need Manage Roles.)`);
@@ -46,7 +53,11 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setTitle('🔓 User released')
-      .setDescription(`${member} (${targetUser.tag}) is out of jail${record?.roles?.length ? ' — previous roles restored' : ''}.`)
+      .setDescription(
+        `${member} (${targetUser.tag}) is out of jail.` +
+        (record?.roles?.length ? `\n**Roles restored:** ${restored}/${record.roles.length}` : '') +
+        (notRestored.length ? `\n⚠️ Couldn't restore ${notRestored.length} role(s) — my role must be **above** them, re-add manually: ${notRestored.join(', ')}` : '')
+      )
       .setColor(0x57f287)
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });
