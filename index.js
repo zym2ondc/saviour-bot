@@ -78,7 +78,6 @@ client.once('ready', () => {
             if (m && role && m.roles.cache.has(role.id)) {
               await m.roles.remove(role, 'Jail expired').catch(() => {});
               if (still.roles?.length) await m.roles.add(still.roles.filter(id => g.roles.cache.has(id)), 'Jail expired: restore').catch(() => {});
-              if (m.moderatable) await m.timeout(null).catch(() => {});
             }
           } catch {}
         }, ms).unref?.();

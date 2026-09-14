@@ -35,7 +35,6 @@ module.exports = {
       if (jailedRole && member.roles.cache.has(jailedRole.id)) {
         await member.roles.remove(jailedRole, `Unjailed by ${interaction.user.tag}`);
       }
-      if (member.moderatable) await member.timeout(null, 'Unjailed').catch(() => {});
       // Restore saved roles (only ones that still exist + below bot)
       if (record?.roles?.length) {
         const restorable = record.roles.filter(id => guild.roles.cache.has(id) && guild.roles.cache.get(id).position < guild.members.me.roles.highest.position);

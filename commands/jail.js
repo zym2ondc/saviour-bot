@@ -49,10 +49,7 @@ module.exports = {
     try {
       if (rolesToSave.length) await member.roles.remove(rolesToSave, `Jailed by ${interaction.user.tag}: ${reason}`).catch(() => {});
       await member.roles.add(jailedRole, `Jailed by ${interaction.user.tag}: ${reason}`);
-      // Extra safety: timeout them briefly so any in-progress spam stops (removed on unjail)
-      if (guild.members.me.permissions.has(PermissionFlagsBits.ModerateMembers) && member.moderatable) {
-        await member.timeout(Math.min(minutes > 0 ? minutes * 60 * 1000 : 60 * 60 * 1000, 28 * 24 * 60 * 60 * 1000), `Jailed: ${reason}`).catch(() => {});
-      }
+      // No timeout — the Jailed role itself restricts them to the jail channel only.
     } catch (e) {
       return interaction.editReply(`❌ Jailing failed: ${e.message}`);
     }
@@ -78,7 +75,6 @@ module.exports = {
           if (m && role && m.roles.cache.has(role.id)) {
             await m.roles.remove(role, 'Jail expired').catch(() => {});
             if (still.roles?.length) await m.roles.add(still.roles.filter(id => g.roles.cache.has(id)), 'Jail expired: restore').catch(() => {});
-            if (m.moderatable) await m.timeout(null).catch(() => {});
           }
           const ch = j ? await g.channels.fetch(j.channelId).catch(() => null) : null;
           if (ch?.isTextBased?.()) ch.send(`🔓 <@${member.id}> jail time expired — released.`).catch(() => {});
