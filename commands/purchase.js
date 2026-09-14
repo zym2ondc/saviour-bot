@@ -20,7 +20,7 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setTitle('PURCHASE')
-      .setDescription(`${STORE_URL}\n\n**PAYMENT OPTIONS**\n- PayPal\n- Litecoin/Bitcoin`)
+      .setDescription(`${STORE_URL}\n\n**PAYMENT OPTIONS**\n- PayPal\n- Litecoin/Bitcoin\n- CashApp`)
       .setColor(0x57f287)
       .setFooter({ text: 'Saviour' })
       .setTimestamp();
