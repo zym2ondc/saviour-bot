@@ -35,6 +35,7 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildWebhooks,
+    GatewayIntentBits.GuildVoiceStates,
   ],
 });
 
@@ -191,8 +192,9 @@ client.on('interactionCreate', async (interaction) => {
   try {
     // --- Slash commands ---
     if (interaction.isChatInputCommand()) {
-      // Admin-only bot: block every slash command for non-administrators
-      if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+      // Music commands are usable by everyone; everything else stays admin-only
+      const MUSIC_COMMANDS = new Set(['play', 'pause', 'resume', 'disconnect']);
+      if (!MUSIC_COMMANDS.has(interaction.commandName) && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
         return interaction.reply({ content: '❌ Only administrators can use this bot.', ephemeral: true }).catch(() => {});
       }
       const cmd = client.commands.get(interaction.commandName);
