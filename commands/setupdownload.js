@@ -20,7 +20,7 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setTitle('DOWNLOAD LOADER HERE')
-      .setDescription(`**DOWNLOAD LOADER HERE**\n\n${DOWNLOAD_URL}`)
+      .setDescription(`${DOWNLOAD_URL}`)
       .setColor(0x57f287)
       .setFooter({ text: 'Saviour' })
       .setTimestamp();
