@@ -68,6 +68,8 @@ module.exports = {
         try {
           const still = security.getJailed(guild.id)[member.id];
           if (!still) return;
+          // Clear record first so enforcement doesn't re-add the role mid-release
+          security.removeJailed(guild.id, member.id);
           const g = await interaction.client.guilds.fetch(guild.id).catch(() => null);
           if (!g) return;
           const m = await g.members.fetch(member.id).catch(() => null);
@@ -78,7 +80,6 @@ module.exports = {
             if (still.roles?.length) await m.roles.add(still.roles.filter(id => g.roles.cache.has(id)), 'Jail expired: restore').catch(() => {});
             if (m.moderatable) await m.timeout(null).catch(() => {});
           }
-          security.removeJailed(g.id, member.id);
           const ch = j ? await g.channels.fetch(j.channelId).catch(() => null) : null;
           if (ch?.isTextBased?.()) ch.send(`🔓 <@${member.id}> jail time expired — released.`).catch(() => {});
         } catch {}

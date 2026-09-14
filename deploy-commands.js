@@ -48,6 +48,10 @@ const rest = new REST({ version: '10' }).setToken(token);
       }
     }
     await client.destroy();
+    // Wipe global commands — they linger from the old deploy method and show
+    // every command twice (once global, once per-server). Guild copies are instant.
+    await rest.put(Routes.applicationCommands(clientId), { body: [] });
+    console.log('Cleared leftover global commands (no more duplicates) ✅');
     console.log('Done — commands should appear instantly (press Ctrl+R in Discord if not). ✅');
   } catch (err) {
     console.error(err);

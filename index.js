@@ -70,6 +70,8 @@ client.once('ready', () => {
             const security = require('./lib/securityConfig');
             const still = security.getJailed(guildId)[userId];
             if (!still) return;
+            // Clear record first so enforcement doesn't re-add the role mid-release
+            security.removeJailed(guildId, userId);
             const m = await g.members.fetch(userId).catch(() => null);
             const j = security.getJail(guildId);
             const role = j ? await g.roles.fetch(j.roleId).catch(() => null) : null;
@@ -78,7 +80,6 @@ client.once('ready', () => {
               if (still.roles?.length) await m.roles.add(still.roles.filter(id => g.roles.cache.has(id)), 'Jail expired: restore').catch(() => {});
               if (m.moderatable) await m.timeout(null).catch(() => {});
             }
-            security.removeJailed(guildId, userId);
           } catch {}
         }, ms).unref?.();
       }

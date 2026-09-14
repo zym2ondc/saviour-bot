@@ -26,9 +26,14 @@ module.exports = {
 
     const record = security.getJailed(guild.id)[member.id] || null;
 
+    // Delete the jail record FIRST — otherwise the jail-enforcement listener
+    // sees the Jailed role vanish while they're still listed as jailed
+    // and puts it straight back on them.
+    security.removeJailed(guild.id, member.id);
+
     try {
       if (jailedRole && member.roles.cache.has(jailedRole.id)) {
-        await member.roles.remove(jailedRole, `Unjailed by ${interaction.user.tag}`).catch(() => {});
+        await member.roles.remove(jailedRole, `Unjailed by ${interaction.user.tag}`);
       }
       if (member.moderatable) await member.timeout(null, 'Unjailed').catch(() => {});
       // Restore saved roles (only ones that still exist + below bot)
@@ -37,10 +42,8 @@ module.exports = {
         if (restorable.length) await member.roles.add(restorable, 'Unjail: restore previous roles').catch(() => {});
       }
     } catch (e) {
-      return interaction.editReply(`❌ Unjail failed: ${e.message}`);
+      return interaction.editReply(`❌ Unjail failed: ${e.message}\n(My role must be above Jailed and I need Manage Roles.)`);
     }
-
-    security.removeJailed(guild.id, member.id);
 
     const embed = new EmbedBuilder()
       .setTitle('🔓 User released')
