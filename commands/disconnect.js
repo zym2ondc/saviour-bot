@@ -8,7 +8,7 @@ module.exports = {
   async execute(interaction) {
     const ok = music.disconnect(interaction.guildId);
     await interaction.reply({
-      content: ok ? '👋 Disconnected and cleared the queue.' : '❌ I\'m not in a voice channel.',
+      content: ok ? 'Disconnected and cleared the queue.' : 'I am not in a voice channel.',
       ephemeral: true,
     });
   },

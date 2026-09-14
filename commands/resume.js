@@ -8,7 +8,7 @@ module.exports = {
   async execute(interaction) {
     const ok = music.resume(interaction.guildId);
     await interaction.reply({
-      content: ok ? '▶️ Resumed!' : '❌ Nothing is paused right now. Use `/play <link>` first.',
+      content: ok ? 'Resumed!' : 'Nothing is paused right now. Use `/play <link>` first.',
       ephemeral: true,
     });
   },
