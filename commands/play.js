@@ -40,6 +40,7 @@ module.exports = {
       console.error('play failed:', err.message);
       let msg = '❌ Could not play that. Try a different link/search.';
       if (/Sign in to confirm|bot/i.test(err.message)) msg += '\n(YouTube is blocking the server — owner: set `YT_COOKIE` in `.env`.)';
+      else if (/Spotify|SoundCloud/i.test(err.message)) msg = `❌ ${err.message}`;
       await interaction.editReply(msg).catch(() => {});
     }
   },
