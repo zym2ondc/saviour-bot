@@ -3,4 +3,5 @@ node_modules/
 cloudflared.exe
 *.log
 data/*.json
+data/yt-dlp*
 !data/.gitkeep
