@@ -17,6 +17,9 @@ const { buildVerifyUrl } = require('./lib/oauth');
 const { startAuthServer } = require('./server');
 const store = require('./lib/store');
 const ticketConfig = require('./lib/ticketConfig');
+const security = require('./lib/securityConfig');
+const antiRaid = require('./lib/antiRaid');
+const { AuditLogEvent } = require('discord.js');
 
 const token = process.env.DISCORD_TOKEN;
 if (!token) {
@@ -25,7 +28,14 @@ if (!token) {
 }
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildWebhooks,
+  ],
 });
 
 // Load slash commands
@@ -45,11 +55,51 @@ client.once('ready', () => {
   } catch (e) {
     console.error('Auth server failed to start:', e.message);
   }
+  // Re-schedule jail auto-releases that survive restarts
+  try {
+    for (const [guildId, guildData] of Object.entries(require('./lib/securityConfig').getGuild ? (() => { try { return JSON.parse(require('node:fs').readFileSync(require('node:path').join(__dirname, 'data', 'security.json'), 'utf8')); } catch { return {}; } })() : {})) {
+      const jailed = guildData?.jail?.jailed || {};
+      for (const [userId, rec] of Object.entries(jailed)) {
+        if (!rec?.expiresAt) continue;
+        const ms = rec.expiresAt - Date.now();
+        if (ms <= 0) continue;
+        setTimeout(async () => {
+          try {
+            const g = await client.guilds.fetch(guildId).catch(() => null);
+            if (!g) return;
+            const security = require('./lib/securityConfig');
+            const still = security.getJailed(guildId)[userId];
+            if (!still) return;
+            const m = await g.members.fetch(userId).catch(() => null);
+            const j = security.getJail(guildId);
+            const role = j ? await g.roles.fetch(j.roleId).catch(() => null) : null;
+            if (m && role && m.roles.cache.has(role.id)) {
+              await m.roles.remove(role, 'Jail expired').catch(() => {});
+              if (still.roles?.length) await m.roles.add(still.roles.filter(id => g.roles.cache.has(id)), 'Jail expired: restore').catch(() => {});
+              if (m.moderatable) await m.timeout(null).catch(() => {});
+            }
+            security.removeJailed(guildId, userId);
+          } catch {}
+        }, ms).unref?.();
+      }
+    }
+  } catch {}
 });
 
 // Give Unverified to everyone who joins (only if verify is set up — Unverified role exists)
+// + anti-raid join-burst check + re-jail on rejoin
 client.on('guildMemberAdd', async (member) => {
   try {
+    // Re-jail: if they were jailed and left, put them straight back
+    try {
+      const jail = security.getJail(member.guild.id);
+      if (jail?.roleId && security.getJailed(member.guild.id)[member.id]) {
+        const role = await member.guild.roles.fetch(jail.roleId).catch(() => null);
+        if (role) await member.roles.add(role, 'Re-join while jailed').catch(() => {});
+      }
+    } catch {}
+    // Anti-raid join burst (skips bots internally)
+    antiRaid.handleJoin(member).catch(() => {});
     if (member.user.bot) return;
     const guild = member.guild;
     let unverifiedRole = null;
@@ -64,15 +114,72 @@ client.on('guildMemberAdd', async (member) => {
 });
 
 // Auto-lock newly created channels for Unverified (except ticket channels, which manage their own perms)
+// + hide new channels from Jailed + anti-nuke channel-create check
 client.on('channelCreate', async (channel) => {
   try {
     if (!channel.guild || channel.isDMBased?.()) return;
-    if (channel.name.startsWith('ticket-')) return;
     const guild = channel.guild;
-    const unverified = guild.roles.cache.find(r => r.name === (process.env.UNVERIFIED_ROLE_NAME || 'Unverified'));
-    if (!unverified) return;
-    await channel.permissionOverwrites.edit(unverified, { ViewChannel: false }).catch(() => {});
+    if (!channel.name.startsWith('ticket-')) {
+      const unverified = guild.roles.cache.find(r => r.name === (process.env.UNVERIFIED_ROLE_NAME || 'Unverified'));
+      if (unverified) await channel.permissionOverwrites.edit(unverified, { ViewChannel: false }).catch(() => {});
+    }
+    // Hide new channels from Jailed
+    try {
+      const jail = security.getJail(guild.id);
+      if (jail?.roleId && channel.id !== jail.channelId) {
+        const role = guild.roles.cache.get(jail.roleId);
+        if (role) await channel.permissionOverwrites.edit(role, { ViewChannel: false }).catch(() => {});
+      }
+    } catch {}
+    // Anti-nuke: who created this channel?
+    antiRaid.handleAuditAction(guild, AuditLogEvent.ChannelCreate, 'channel create').catch(() => {});
   } catch {}
+});
+
+// ---- Anti-nuke watchers ----
+client.on('channelDelete', async (channel) => {
+  try {
+    if (!channel.guild) return;
+    antiRaid.handleAuditAction(channel.guild, AuditLogEvent.ChannelDelete, 'channel delete').catch(() => {});
+  } catch {}
+});
+client.on('roleCreate', async (role) => {
+  try { antiRaid.handleAuditAction(role.guild, AuditLogEvent.RoleCreate, 'role create').catch(() => {}); } catch {}
+});
+client.on('roleDelete', async (role) => {
+  try { antiRaid.handleAuditAction(role.guild, AuditLogEvent.RoleDelete, 'role delete').catch(() => {}); } catch {}
+});
+client.on('guildBanAdd', async (ban) => {
+  try { antiRaid.handleAuditAction(ban.guild, AuditLogEvent.MemberBanAdd, 'ban').catch(() => {}); } catch {}
+});
+client.on('guildMemberRemove', async (member) => {
+  try {
+    // Kicks show up as MemberKick in audit log
+    antiRaid.handleAuditAction(member.guild, AuditLogEvent.MemberKick, 'kick').catch(() => {});
+  } catch {}
+});
+client.on('webhookUpdate', async (channel) => {
+  try {
+    if (!channel.guild) return;
+    antiRaid.handleAuditAction(channel.guild, AuditLogEvent.WebhookCreate, 'webhook create').catch(() => {});
+  } catch {}
+});
+client.on('guildMemberUpdate', async (oldMember, newMember) => {
+  try {
+    // Jail enforcement: if someone removes the Jailed role manually, put it back
+    const jail = security.getJail(newMember.guild.id);
+    if (jail?.roleId && security.getJailed(newMember.guild.id)[newMember.id]) {
+      if (!newMember.roles.cache.has(jail.roleId)) {
+        const role = await newMember.guild.roles.fetch(jail.roleId).catch(() => null);
+        if (role) await newMember.roles.add(role, 'Jail enforcement: role removed').catch(() => {});
+      }
+    }
+  } catch {}
+});
+
+// ---- Anti-raid spam / mention-raid watcher ----
+client.on('messageCreate', async (message) => {
+  try { antiRaid.handleMessage(message).catch(() => {}); } catch {}
 });
 
 client.on('interactionCreate', async (interaction) => {
@@ -85,7 +192,7 @@ client.on('interactionCreate', async (interaction) => {
       }
       const cmd = client.commands.get(interaction.commandName);
       if (!cmd) {
-        return interaction.reply({ content: `❌ Unknown command \`/${interaction.commandName}\`. Try \`/ticketsetup\`, \`/verifysetup\`, \`/restore\` or \`/help\`.`, ephemeral: true }).catch(() => {});
+        return interaction.reply({ content: `❌ Unknown command \`/${interaction.commandName}\`. Try \`/help\` for the full list.`, ephemeral: true }).catch(() => {});
       }
       await cmd.execute(interaction);
       return;
