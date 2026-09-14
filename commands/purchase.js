@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
 
-const STORE_URL = 'https://blessedcheats.mysellauth.com/';
+const STORE_URL = 'https://blessedcheats.online/';
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -20,7 +20,7 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setTitle('PURCHASE')
-      .setDescription(`${STORE_URL}\n\n**PAYMENT OPTIONS**\n- PayPal\n- Litecoin/Bitcoin\n- CashApp`)
+      .setDescription(`${STORE_URL}\n\n**PAYMENT OPTIONS**\n- PayPal\n- Litecoin/Bitcoin\n- CashApp\n\nMake a ticket after purchase`)
       .setColor(0x57f287)
       .setFooter({ text: 'Saviour' })
       .setTimestamp();
