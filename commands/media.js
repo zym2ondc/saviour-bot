@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder } = require('discord.js');
 const mediaConfig = require('../lib/mediaConfig');
-const { fetchLatestVideo, buildPostMessage, resolveTikTokUsername } = require('../lib/tiktok');
+const { fetchLatestVideo, buildPostMessage, resolveTikTokUsername, fetchVideoOEmbed } = require('../lib/tiktok');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -23,6 +23,27 @@ module.exports = {
           opt.setName('role')
             .setDescription('Role to @ when a new TikTok drops')
             .setRequired(true))
+        .addStringOption(opt =>
+          opt.setName('message')
+            .setDescription('Custom ping message (default: New TikTok just dropped!)')
+            .setRequired(false))
+    )
+    .addSubcommand(sub =>
+      sub.setName('post')
+        .setDescription('Announce a new TikTok now: paste the video link, bot pings the role')
+        .addStringOption(opt =>
+          opt.setName('link')
+            .setDescription('Paste the TikTok VIDEO link')
+            .setRequired(true))
+        .addRoleOption(opt =>
+          opt.setName('role')
+            .setDescription('Role to @ (defaults to the saved watcher role, if any)')
+            .setRequired(false))
+        .addChannelOption(opt =>
+          opt.setName('channel')
+            .setDescription('Channel to post in (defaults to current channel)')
+            .addChannelTypes(ChannelType.GuildText)
+            .setRequired(false))
         .addStringOption(opt =>
           opt.setName('message')
             .setDescription('Custom ping message (default: New TikTok just dropped!)')
@@ -83,6 +104,44 @@ module.exports = {
       if (latest.cover) embed.setThumbnail(latest.cover);
 
       return interaction.editReply({ embeds: [embed] });
+    }
+
+    if (sub === 'post') {
+      const link = interaction.options.getString('link').trim();
+      const cfg = mediaConfig.getGuild(guildId);
+      const role = interaction.options.getRole('role')
+        || (cfg?.roleId ? interaction.guild.roles.cache.get(cfg.roleId) || null : null);
+      const channel = interaction.options.getChannel('channel') || interaction.channel;
+      const message = interaction.options.getString('message') || cfg?.customMessage || null;
+
+      await interaction.deferReply({ ephemeral: true });
+
+      let video;
+      try {
+        video = await fetchVideoOEmbed(link);
+      } catch (err) {
+        return interaction.editReply({ content: `❌ ${err.message}` });
+      }
+
+      const content = `${role ? `${role} ` : ''}${message || '🔥 **New TikTok just dropped!**'}\n${video.url}`;
+      const embed = new EmbedBuilder()
+        .setTitle(`🎵 @${video.authorUniqueId} — new TikTok!`)
+        .setDescription((video.desc || 'New TikTok!').slice(0, 300))
+        .setURL(video.url)
+        .setColor(0xfe2c55)
+        .setTimestamp();
+      if (video.thumbnail) embed.setImage(video.thumbnail);
+
+      try {
+        await channel.send({ content, embeds: [embed] });
+      } catch {
+        return interaction.editReply({ content: `❌ Couldn't send in ${channel}. Check I have View + Send Messages there.` });
+      }
+      // Remember it as latest so the auto-watcher won't re-post it later
+      if (cfg?.tiktok && video.authorUniqueId.toLowerCase() === cfg.tiktok.toLowerCase()) {
+        mediaConfig.setGuild(guildId, { lastVideoId: video.id });
+      }
+      return interaction.editReply({ content: `✅ Posted in ${channel} ${role ? `+ pinged ${role}` : '(no role pinged — pass a `role` or set one via `/media setup`)'}` });
     }
 
     if (sub === 'status') {
