@@ -56,6 +56,11 @@ client.once('ready', () => {
   } catch (e) {
     console.error('Auth server failed to start:', e.message);
   }
+  try {
+    require('./lib/mediaNotify').startMediaNotifier(client);
+  } catch (e) {
+    console.error('Media notifier failed to start:', e.message);
+  }
   // Re-schedule jail auto-releases that survive restarts
   try {
     for (const [guildId, guildData] of Object.entries(require('./lib/securityConfig').getGuild ? (() => { try { return JSON.parse(require('node:fs').readFileSync(require('node:path').join(__dirname, 'data', 'security.json'), 'utf8')); } catch { return {}; } })() : {})) {
