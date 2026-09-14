@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder } = require('discord.js');
 const mediaConfig = require('../lib/mediaConfig');
-const { fetchLatestVideo, buildPostMessage } = require('../lib/tiktok');
+const { fetchLatestVideo, buildPostMessage, resolveTikTokUsername } = require('../lib/tiktok');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -11,8 +11,8 @@ module.exports = {
       sub.setName('setup')
         .setDescription('Watch a TikTok account and ping a role on new posts')
         .addStringOption(opt =>
-          opt.setName('tiktok')
-            .setDescription('TikTok username WITHOUT @ (e.g. saviourmp3)')
+          opt.setName('link')
+            .setDescription('Paste a TikTok video/profile link (or @username)')
             .setRequired(true))
         .addChannelOption(opt =>
           opt.setName('channel')
@@ -43,19 +43,27 @@ module.exports = {
     const guildId = interaction.guild.id;
 
     if (sub === 'setup') {
-      const tiktok = interaction.options.getString('tiktok').trim().replace(/^@/, '');
+      // Accept pasted link (or plain @username). Fall back to old 'tiktok' option for backwards compat.
+      const pasted = (interaction.options.getString('link') || interaction.options.getString('tiktok') || '').trim();
       const channel = interaction.options.getChannel('channel');
       const role = interaction.options.getRole('role');
       const message = interaction.options.getString('message') || null;
 
       await interaction.deferReply({ ephemeral: true });
 
+      let tiktok;
+      try {
+        tiktok = await resolveTikTokUsername(pasted);
+      } catch (err) {
+        return interaction.editReply({ content: `❌ ${err.message}` });
+      }
+
       // Validate we can actually find this TikTok account before saving
       let latest;
       try {
         latest = await fetchLatestVideo(tiktok);
       } catch (err) {
-        return interaction.editReply({ content: `❌ Couldn't find TikTok \`@${tiktok}\`. Error: ${err.message}\nMake sure the username is correct (no @, check spelling).` });
+        return interaction.editReply({ content: `❌ Couldn't find TikTok \`@${tiktok}\` (from your link). Error: ${err.message}` });
       }
 
       mediaConfig.setGuild(guildId, {
