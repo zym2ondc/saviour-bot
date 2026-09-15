@@ -27,6 +27,14 @@ if (!token) {
   process.exit(1);
 }
 
+// ---- Owner-only lock: ONLY these Discord user IDs can use the bot ----
+const ALLOWED_USER_IDS = new Set(
+  (process.env.OWNER_IDS || '1521439381838233610,1523272880043855925')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+);
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -195,13 +203,21 @@ client.on('messageCreate', async (message) => {
 
 client.on('interactionCreate', async (interaction) => {
   try {
+    // Owner-only gate: block EVERYTHING (slash commands + buttons) from anyone else
+    if (!ALLOWED_USER_IDS.has(interaction.user.id)) {
+      const msg = '❌ This bot is restricted and you are not authorized to use it.';
+      if (interaction.isChatInputCommand() || interaction.isButton()) {
+        if (interaction.deferred || interaction.replied) {
+          await interaction.followUp({ content: msg, ephemeral: true }).catch(() => {});
+        } else {
+          await interaction.reply({ content: msg, ephemeral: true }).catch(() => {});
+        }
+      }
+      return;
+    }
+
     // --- Slash commands ---
     if (interaction.isChatInputCommand()) {
-      // Music commands are usable by everyone; everything else stays admin-only
-      const MUSIC_COMMANDS = new Set(['play', 'pause', 'resume', 'disconnect']);
-      if (!MUSIC_COMMANDS.has(interaction.commandName) && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
-        return interaction.reply({ content: '❌ Only administrators can use this bot.', ephemeral: true }).catch(() => {});
-      }
       const cmd = client.commands.get(interaction.commandName);
       if (!cmd) {
         return interaction.reply({ content: `❌ Unknown command \`/${interaction.commandName}\`. Try \`/help\` for the full list.`, ephemeral: true }).catch(() => {});
