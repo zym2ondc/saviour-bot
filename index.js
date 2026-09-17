@@ -201,10 +201,16 @@ client.on('messageCreate', async (message) => {
   try { antiRaid.handleMessage(message).catch(() => {}); } catch {}
 });
 
+// Buttons anyone is allowed to press (verify + tickets must work for all members)
+const PUBLIC_BUTTON_IDS = new Set(['verify_start', 'create_ticket', 'close_ticket']);
+
 client.on('interactionCreate', async (interaction) => {
   try {
-    // Owner-only gate: block EVERYTHING (slash commands + buttons) from anyone else
-    if (!ALLOWED_USER_IDS.has(interaction.user.id)) {
+    // Public buttons bypass the owner-only gate so every member can verify / open tickets
+    const isPublicButton = interaction.isButton() && PUBLIC_BUTTON_IDS.has(interaction.customId);
+
+    // Owner-only gate: blocks slash commands + non-public buttons from anyone else
+    if (!isPublicButton && !ALLOWED_USER_IDS.has(interaction.user.id)) {
       const msg = '❌ This bot is restricted and you are not authorized to use it.';
       if (interaction.isChatInputCommand() || interaction.isButton()) {
         if (interaction.deferred || interaction.replied) {
