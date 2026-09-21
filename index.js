@@ -4,6 +4,8 @@ process.on('unhandledRejection', (e) => console.error('⚠️ unhandledRejection
 process.on('uncaughtException', (e) => console.error('💥 uncaughtException:', e?.message || e));
 const fs = require('node:fs');
 const path = require('node:path');
+// Proxy first: must be set before the Discord client / any fetch runs.
+const proxy = require('./lib/proxy').applyProxy();
 function safeRequire(name) {
   try {
     const m = require(name);
@@ -60,6 +62,8 @@ const client = new Client({
     GatewayIntentBits.GuildWebhooks,
     GatewayIntentBits.GuildVoiceStates,
   ],
+  // Route Discord REST through the proxy when one is configured
+  ...(proxy ? { rest: { agent: proxy.restAgent } } : {}),
 });
 
 // Load slash commands (one broken command must not kill the whole bot)

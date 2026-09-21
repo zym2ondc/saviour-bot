@@ -7,6 +7,9 @@ const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.CLIENT_ID;
 const guildId = process.env.GUILD_ID; // optional: single-guild override for testing
 
+// Use proxy for Discord REST when configured (same PROXY_URL as the bot)
+const proxy = require('./lib/proxy').applyProxy();
+
 if (!token || !clientId) {
   console.error('Missing DISCORD_TOKEN or CLIENT_ID in .env');
   process.exit(1);
@@ -21,7 +24,7 @@ for (const file of commandFiles) {
   commands.push(cmd.data.toJSON());
 }
 
-const rest = new REST({ version: '10' }).setToken(token);
+const rest = new REST({ version: '10', ...(proxy ? { agent: proxy.restAgent } : {}) }).setToken(token);
 
 (async () => {
   try {
