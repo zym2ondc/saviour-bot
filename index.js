@@ -62,15 +62,23 @@ const client = new Client({
   ],
 });
 
-// Load slash commands
+// Load slash commands (one broken command must not kill the whole bot)
 client.commands = new Collection();
 const commandsPath = path.join(__dirname, 'commands');
 if (fs.existsSync(commandsPath)) {
   for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) {
-    const cmd = require(path.join(commandsPath, file));
-    client.commands.set(cmd.data.name, cmd);
+    try {
+      const cmd = require(path.join(commandsPath, file));
+      client.commands.set(cmd.data.name, cmd);
+      console.log(`⌨️ loaded command /${cmd.data.name} ✅`);
+    } catch (e) {
+      console.error(`⚠️ skipped command ${file}: ${e?.message || e}`);
+    }
   }
+  console.log(`⌨️ commands ready: ${client.commands.size} loaded`);
 }
+
+console.log('🔌 logging in to Discord...');
 
 client.once('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
@@ -375,4 +383,8 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-client.login(token);
+client.login(token).catch((e) => {
+  console.error(`💥 Discord login failed: ${e?.message || e}`);
+  console.error('   Fix: check DISCORD_TOKEN is valid + panel has internet access.');
+  process.exit(1);
+});
