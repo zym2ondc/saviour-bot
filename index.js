@@ -1,4 +1,7 @@
 require('dotenv').config();
+console.log(`🚀 Booting saviour-bot | node ${process.version} | cwd=${process.cwd()} | PORT=${process.env.PORT || '3000'}`);
+process.on('unhandledRejection', (e) => console.error('⚠️ unhandledRejection:', e?.message || e));
+process.on('uncaughtException', (e) => console.error('💥 uncaughtException:', e?.message || e));
 const fs = require('node:fs');
 const path = require('node:path');
 const {

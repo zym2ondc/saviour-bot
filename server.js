@@ -83,7 +83,13 @@ function startAuthServer(discordClient) {
     }
   });
 
-  app.listen(port, () => console.log(`🔐 Verify server listening on :${port} → ${redirectUri}`));
+  const server = app.listen(port, () => console.log(`🔐 Verify server listening on :${port} → ${redirectUri}`));
+  server.on('error', (err) => {
+    // Don't crash the whole bot if the web port is taken/blocked on the host —
+    // verify button still replies, only the OAuth callback page is affected.
+    console.error(`⚠️ Verify web server could not listen on :${port}: ${err.message}`);
+    console.error(`   Fix: set PORT to your panel's allocated port (Allocation tab) and match OAUTH_REDIRECT_URI.`);
+  });
 }
 
 module.exports = { startAuthServer };
