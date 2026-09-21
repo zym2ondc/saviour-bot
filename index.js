@@ -79,6 +79,11 @@ if (fs.existsSync(commandsPath)) {
 }
 
 console.log('🔌 logging in to Discord...');
+console.log('🌐 testing connectivity to discord.com...');
+fetch('https://discord.com/api/v10/gateway', { signal: AbortSignal.timeout(15000) })
+  .then(async (r) => console.log(`🌐 discord.com reachable ✅ (http ${r.status})`))
+  .catch((e) => console.error(`🌐 discord.com UNREACHABLE 💥: ${e?.message || e} — host is blocking Discord API, open a ticket with KeritCloud`));
+setTimeout(() => console.log('⏳ still trying to log in (no response from Discord yet — likely blocked network)...'), 20000);
 
 client.once('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
