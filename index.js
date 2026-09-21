@@ -4,6 +4,17 @@ process.on('unhandledRejection', (e) => console.error('⚠️ unhandledRejection
 process.on('uncaughtException', (e) => console.error('💥 uncaughtException:', e?.message || e));
 const fs = require('node:fs');
 const path = require('node:path');
+function safeRequire(name) {
+  try {
+    const m = require(name);
+    console.log(`📦 loaded ${name} ✅`);
+    return m;
+  } catch (e) {
+    console.error(`💥 failed to load ${name}: ${e?.message || e}`);
+    console.error(e?.stack || e);
+    process.exit(1);
+  }
+}
 const {
   Client,
   Collection,
@@ -14,17 +25,18 @@ const {
   ButtonStyle,
   PermissionFlagsBits,
   ChannelType,
-} = require('discord.js');
+} = safeRequire('discord.js');
 
-const { buildVerifyUrl } = require('./lib/oauth');
-const { startAuthServer } = require('./server');
-const store = require('./lib/store');
-const ticketConfig = require('./lib/ticketConfig');
-const security = require('./lib/securityConfig');
-const antiRaid = require('./lib/antiRaid');
-const { AuditLogEvent } = require('discord.js');
+const { buildVerifyUrl } = safeRequire('./lib/oauth');
+const { startAuthServer } = safeRequire('./server');
+const store = safeRequire('./lib/store');
+const ticketConfig = safeRequire('./lib/ticketConfig');
+const security = safeRequire('./lib/securityConfig');
+const antiRaid = safeRequire('./lib/antiRaid');
+const { AuditLogEvent } = safeRequire('discord.js');
 
 const token = process.env.DISCORD_TOKEN;
+console.log(`🔑 DISCORD_TOKEN ${token ? `present (len=${token.length})` : 'MISSING'} | CLIENT_ID=${process.env.CLIENT_ID ? 'present' : 'missing'} | CLIENT_SECRET=${process.env.CLIENT_SECRET ? 'present' : 'missing'}`);
 if (!token) {
   console.error('❌ Missing DISCORD_TOKEN in .env (copy .env.example to .env and fill it)');
   process.exit(1);
