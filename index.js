@@ -78,20 +78,23 @@ if (fs.existsSync(commandsPath)) {
   console.log(`⌨️ commands ready: ${client.commands.size} loaded`);
 }
 
-console.log('🔌 logging in to Discord...');
 console.log('🌐 testing connectivity to discord.com...');
 fetch('https://discord.com/api/v10/gateway', { signal: AbortSignal.timeout(15000) })
   .then(async (r) => console.log(`🌐 discord.com reachable ✅ (http ${r.status})`))
   .catch((e) => console.error(`🌐 discord.com UNREACHABLE 💥: ${e?.message || e} — host is blocking Discord API, open a ticket with KeritCloud`));
-setTimeout(() => console.log('⏳ still trying to log in (no response from Discord yet — likely blocked network)...'), 20000);
 
-client.once('ready', () => {
+// Start the verify web page immediately — it must stay up even while Discord login retries.
+try {
+  startAuthServer(client);
+} catch (e) {
+  console.error('Auth server failed to start:', e.message);
+}
+
+let readyOnce = false;
+function onReady() {
+  if (readyOnce) return;
+  readyOnce = true;
   console.log(`✅ Logged in as ${client.user.tag}`);
-  try {
-    startAuthServer(client);
-  } catch (e) {
-    console.error('Auth server failed to start:', e.message);
-  }
   try {
     require('./lib/mediaNotify').startMediaNotifier(client);
   } catch (e) {
@@ -131,7 +134,9 @@ client.once('ready', () => {
       }
     }
   } catch {}
-});
+}
+client.once('ready', onReady); // discord.js v14
+client.once('clientReady', onReady); // v15 forward-compat
 
 // Give Unverified to everyone who joins (only if verify is set up — Unverified role exists)
 // + anti-raid join-burst check + re-jail on rejoin
@@ -388,8 +393,29 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-client.login(token).catch((e) => {
-  console.error(`💥 Discord login failed: ${e?.message || e}`);
-  console.error('   Fix: check DISCORD_TOKEN is valid + panel has internet access.');
-  process.exit(1);
-});
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+// Shared-host IPs get 429'd: retry patiently (5 min) instead of dying or spam-restarting.
+async function loginWithRetry() {
+  let attempt = 1;
+  for (;;) {
+    console.log(`🔌 logging in to Discord... (attempt ${attempt})`);
+    readyOnce = false;
+    try {
+      await Promise.race([
+        client.login(token),
+        sleep(60000).then(() => { throw new Error('login timed out after 60s (rate-limited IP?)'); }),
+      ]);
+      // Wait a bit for ready to fire (login resolves before ready on v14)
+      for (let i = 0; i < 30 && !readyOnce; i++) await sleep(1000);
+      if (readyOnce) return;
+      throw new Error('login sent but no ready within 30s (rate-limited IP?)');
+    } catch (e) {
+      console.error(`💥 Discord login attempt ${attempt} failed: ${e?.message || e}`);
+    }
+    try { await client.destroy().catch(() => {}); } catch {}
+    console.log('⏳ retrying in 5 minutes (do NOT spam-restart — it worsens 429s)...');
+    await sleep(5 * 60 * 1000);
+    attempt++;
+  }
+}
+loginWithRetry();
