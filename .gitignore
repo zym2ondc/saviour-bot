@@ -5,3 +5,4 @@ cloudflared.exe
 data/*.json
 data/yt-dlp*
 !data/.gitkeep
+package-lock.json
